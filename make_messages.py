@@ -2,6 +2,7 @@
 
 import argparse
 import daemon
+import logging
 import operator
 import re
 import subprocess
@@ -10,7 +11,7 @@ import time
 import yaml
 
 def timeit(method):
-    """ Decorator, for timing individual function calls
+    """ Decorator, for timing individual function calls if you want to do that
     """
     def timed(*args, **kw):
         ts = time.time()
@@ -37,6 +38,7 @@ def get_sensor_comparator_dict():
     """ Takes a space-separated list of sensor names and operators from
     script, and converts into a dict { sensor_name: (<operator function>,type) }.
     """
+    logger.info("getting sensor value operators.")
     thresholds = get_command_output("threshold_comparators.sh")
     ops_dict = dict()
     for line in thresholds.split("\n"):
@@ -52,6 +54,7 @@ def get_threshold_dict():
     You could move this transformation into the script if it takes too long,
     I think.
     """
+    logger.info("getting per-host threshold information.")
     thresholds_text = get_command_output("per-host-thresholds.yaml.sh")
     thresholds_list = list(yaml.load(thresholds_text))
     return { x["hostname"]: x for x in thresholds_list }
@@ -89,7 +92,7 @@ def size_conv(size):
     try:
         value = float(size[0:-1]) * convs[size[-1:]]
     except:
-        sys.stderr.write("Could not convert this into a float: %s\n" % size)
+        logger.error("could not convert value to float: %s" % size)
     return value
 
 def compare_datum(datum, threshold, operator_tuple):
@@ -127,8 +130,7 @@ def transform_errors_to_dict(error_list):
         if match is None:
             match = no_attribute_re.match(error)
         if match is None:
-            sys.stderr.write("Warning: could not pattern match error: %s\n" % error)
-            # TODO: change to logger
+            logger.warn("could not pattern match error: %s" % error)
         sensor_name = match.group("sensor_name")
         error_dict[sensor_name] = error
     return error_dict
@@ -143,7 +145,9 @@ def check_data_against_thresholds(thresholds, comparators):
     It's kind of fiddly because this whole thing is a disgusting hack.
     """
 
+    logger.info("getting sensor data from qstat.")
     host_data_text = get_command_output("qstat-explain.yaml.sh")
+    logger.info("comparing data to thresholds.")
     
     host_doc_generator = yaml.load_all(host_data_text)
    
@@ -165,7 +169,7 @@ def check_data_against_thresholds(thresholds, comparators):
                 else:
                     result = 0
 
-                if host_data.has_key("%s_nagtxt" % k):
+                if host_data.has_key("%s_nagtxt" % k) and host_data.has_key(k):
                     data_string = "%s |%s" % (str(host_data[k]), host_data["%s_nagtxt" % k])
                 elif host_data.has_key(k):
                     data_string = str(host_data[k])
@@ -176,11 +180,16 @@ def check_data_against_thresholds(thresholds, comparators):
                     data_string = "0"
                 messages.append("%s %s %d %s" % (hostname, k, result, data_string))
 
+    logger.info("prepared message output from data comparison.")
     print '\n'.join(messages)
     # ^-- TODO: send to NSCA
+    logger.info("finished round of message output.")
 
 
 class MessageMaker:
+    """ Brings all of the above together into one thing that makes the NSCA
+    messages.
+    """
     def __init__(self):
         self.comparators = get_sensor_comparator_dict()
         self.thresholds = get_threshold_dict()
@@ -190,13 +199,31 @@ class MessageMaker:
         check_data_against_thresholds(self.thresholds, self.comparators)
 
 class MessageMakerDaemon:
-    def __init__(self):
-        maker = MessageMaker()
+    """ Wraps a MessageMaker instance into a daemon.
+    """
+    def __init__(self, config, log_file_handle):
+        self.message_maker = MessageMaker()
+        self.log_file_handle = log_file_handle
+        self.config = config
+
+    def start(self, run_in_foreground):
+        logger.info("starting daemon.")
+        if run_in_foreground == False:
+            self.context = daemon.DaemonContext()
+            self.context.files_preserve = [fh.stream]
+            self.context.open()
+
+            try:
+                self.loop(self.config["check_interval"])
+            finally:
+                context.close()
+        else:
+            self.loop(self.config["check_interval"])
         pass
 
     def loop(self, interval):
         while True:
-            maker.make()
+            self.message_maker.make()
             time.sleep(interval)
 
 
@@ -219,9 +246,8 @@ def get_config_from_file(filename):
         with open(filename, 'r') as config_file:
             config = yaml.load_all(config_file).next()
     except :
-        sys.stderr.write("Error: failed to read config file, stopping...\n")
-        # ^-- TODO: convert to logger
-        raise
+        logger.error("failed to read config file, exiting.")
+        sys.exit(2)
 
     must_have_keys = list()
     optional_keys = { "check_interval": 120,
@@ -230,8 +256,7 @@ def get_config_from_file(filename):
 
     for key in must_have_keys:
         if not key in config.keys():
-            sys.stderr.write("Error: mandatory key not found in config file: %s\n" % key)
-            # ^-- TODO: convert to logger
+            logger.error("mandatory key not found in config file: %s" % key)
             sys.exit(2)
     
     for key in optional_keys.keys():
@@ -241,38 +266,61 @@ def get_config_from_file(filename):
     for key in config.keys():
         if ((not key in must_have_keys) and
             (not key in optional_keys.keys())):
-            sys.stderr.write("Error: unrecognised key in config file: %s\n" % key)
+            logger.error("unrecognised key in config file: %s" % key)
             sys.exit(2)
 
     return config
 
 def print_default_config_file():
-    print("check_interval: 120\n" + 
-          "log_level: INFO\n" + 
-          "log_file: /var/log/sge_to_icinga.log\n")
+    sys.stdout.write("check_interval: 120\n" + 
+                     "log_level: INFO\n" + 
+                     "log_file: /var/log/sge_to_icinga.log\n")
+    pass
+
+def configure_logger_returning_log_file_handle(args, config):
+
+    logger.setLevel(config["log_level"])
+
+    frmt = logging.Formatter('%(module)s - %(asctime)s - %(levelname)s: %(message)s')
+
+    if args.run_in_foreground or args.make_config or args.sync:
+       fh = logging.StreamHandler()
+    else:
+       fh = logging.FileHandler(config["log_file"])
+
+    fh.setFormatter(frmt)
+    logger.addHandler(fh)
+
+    return fh
 
 def main():
     args = parse_args()
     config = get_config_from_file(args.config_file)
+    
+    log_file_handle = configure_logger_returning_log_file_handle(args, config)
+    # ^-- this needs to get explicitly preserved by the daemon setup
+    #     all other file handles get closed
 
-    if config.make_config and config.sync:
-        sys.stderr.write("Error: incompatible options specified.\n")
+    if args.make_config and args.sync:
+        logger.error("incompatible options specified, exiting.")
         sys.exit(2)
 
-    if config.make_config:
+    if args.make_config:
         print_default_config_file()
         sys.exit(0)
 
-    if config.sync:
+    if args.sync:
         # TODO: this
         sys.exit(0)
         pass
 
     # Only option left is run daemon
-    
+    d = MessageMakerDaemon(config, log_file_handle)
+    d.start(args.run_in_foreground)
+    sys.stderr.write("Program should not reach this point. Eep.\n")
+    sys.exit(2)
 
-    d = MessageMakerDaemon()
-    d.loop()
-    
 if __name__ == "__main__":
+    logger = logging.getLogger("SGE2NSCA")
+    # ^-- GLOBAL SCOPE
     main()
