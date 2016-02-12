@@ -10,6 +10,9 @@ import sys
 import time
 import yaml
 
+from NSCAMessageDevice import MessageDevice
+from IcingaService import IcingaService
+
 def timeit(method):
     """ Decorator, for timing individual function calls if you want to do that
     """
@@ -59,25 +62,25 @@ def get_threshold_dict():
     thresholds_list = list(yaml.load(thresholds_text))
     return { x["hostname"]: x for x in thresholds_list }
 
-def cmp_op_from_string(operator_string):                                  
-    """ Takes a string containing an operator and returns the function that     
-    performs that operation.                                                    
-                                                                                
-    Intended to convert the operator column of the SGE load sensor table        
-    into the operation so that we can know how to compare the sensor data.      
-    """                                                                         
-    if operator_string == "<=":                                                 
-        return operator.le                                                      
-    elif operator_string == "==":                                               
-        return operator.eq                                                      
-    elif operator_string == ">=":                                               
-        return operator.ge                                                      
-    elif operator_string == ">":                                                
-        return operator.gt                                                      
-    elif operator_string == "<":                                                
-        return operator.lt                                                      
-    else:                                                                       
-        return None     
+def cmp_op_from_string(operator_string):
+    """ Takes a string containing an operator and returns the function that
+    performs that operation.
+
+    Intended to convert the operator column of the SGE load sensor table
+    into the operation so that we can know how to compare the sensor data.
+    """
+    if operator_string == "<=":
+        return operator.le
+    elif operator_string == "==":
+        return operator.eq
+    elif operator_string == ">=":
+        return operator.ge
+    elif operator_string == ">":
+        return operator.gt
+    elif operator_string == "<":
+        return operator.lt
+    else:
+        return None
 
 def size_conv(size):
     """ Converts numbers with binarised SI suffixes into real numbers.
@@ -114,7 +117,7 @@ def compare_datum(datum, threshold, operator_tuple):
 
 def transform_errors_to_dict(error_list):
     """ The errors come out of the qstat wrap as a list: this tries to
-    transform them into a dictionary with the keys being the sensor_name 
+    transform them into a dictionary with the keys being the sensor_name
     referenced.
 
     It has a limited knowledge of the possible errors though.
@@ -136,35 +139,42 @@ def transform_errors_to_dict(error_list):
     return error_dict
 
 def check_data_against_thresholds(thresholds, comparators):
-    """ Main comparison routine, where the daemon will spend move its non-sleep
+    """ Main comparison routine, where the daemon will spend its non-sleep
     time.
 
     Tries to avoid storing more than one host's worth of data, to keep
     memory usage down.
 
     It's kind of fiddly because this whole thing is a disgusting hack.
+
+    Such a disgusting inelegant hack that requires other disgusting inelegant hacks that it makes me angry.
     """
 
     logger.info("getting sensor data from qstat.")
+    time_start = time.time()
     host_data_text = get_command_output("qstat-explain.yaml.sh")
+    time_stop = time.time()
+    logger.info("got sensor data from qstat in %d s." % (time_stop - time_start))
+
     logger.info("comparing data to thresholds.")
-    
+    time_start = time.time()
+
     host_doc_generator = yaml.load_all(host_data_text)
-   
+
     messages = list()
     for host_data in host_doc_generator:
         hostname = host_data["hostname"]
         if host_data.has_key("errors"):
             host_data["errors"] = transform_errors_to_dict(host_data["errors"])
         else:
-            host_data["errors"] = dict() 
+            host_data["errors"] = dict()
             # ^-- adding an empty dict makes life easier for checking
         for k in comparators.keys():
             if ((k[-7:] != "_nagtxt") and
                 comparators.has_key("%s_nagtxt" % k) and
                 not k in ["hostname","qname"]):
 
-                if thresholds[hostname].has_key(k) and host_data.has_key(k): 
+                if thresholds[hostname].has_key(k) and host_data.has_key(k):
                     result = compare_datum(host_data[k], thresholds[hostname][k], comparators[k])
                 else:
                     result = 0
@@ -178,13 +188,31 @@ def check_data_against_thresholds(thresholds, comparators):
                     data_string = host_data["errors"][k]
                 else:
                     data_string = "0"
-                messages.append("%s %s %d %s" % (hostname, k, result, data_string))
+                messages.append((hostname, k, result, data_string))
 
-    logger.info("prepared message output from data comparison.")
-    print '\n'.join(messages)
-    # ^-- TODO: send to NSCA
-    logger.info("finished round of message output.")
+    time_stop = time.time()
+    logger.info("prepared message quads from data comparison in %d s." % (time_stop - time_start))
+    return messages
 
+def size_of_messages(messages):
+    """ Gets the size of a container of containers of things.
+
+    Used for printing out how much RAM the messages list is using.
+    """
+    s = sys.getsizeof
+
+    return (s(messages) + 
+            sum( [ s(x) for x in messages ] ) +
+            sum( [ sum([s(y) for y in x]) for x in messages] )
+            ) 
+
+def make_hosts_services_dict(messages):
+    """Makes a dict containing which services each host needs on the monitoring
+    platform: intended to be used to generate Icinga calls.
+    """
+
+    hosts_services_dict = { x[0]: [y[1] for y in messages if y[0]==x[0] ] for x in messages }
+    return hosts_services_dict
 
 class MessageMaker:
     """ Brings all of the above together into one thing that makes the NSCA
@@ -196,7 +224,11 @@ class MessageMaker:
         # set up the sender process here?
 
     def make(self):
-        check_data_against_thresholds(self.thresholds, self.comparators)
+        messages = check_data_against_thresholds(self.thresholds, self.comparators)
+        logger.info("holding message quad list in %d bytes." % 
+                    size_of_messages(messages))
+        return messages 
+
 
 class MessageMakerDaemon:
     """ Wraps a MessageMaker instance into a daemon.
@@ -205,6 +237,8 @@ class MessageMakerDaemon:
         self.message_maker = MessageMaker()
         self.log_file_handle = log_file_handle
         self.config = config
+        self.icinga_service = IcingaService(config, logger)
+        self.message_device = MessageDevice(config, logger)
 
     def start(self, run_in_foreground):
         logger.info("starting daemon.")
@@ -223,7 +257,12 @@ class MessageMakerDaemon:
 
     def loop(self, interval):
         while True:
-            self.message_maker.make()
+            messages = self.message_maker.make()
+            hosts_services_dict = make_hosts_services_dict(messages)
+            self.icinga_service.ensure_hosts_exist(hosts_services_dict)
+
+            self.message_device.send_message_quads(messages)
+            logger.info("sleeping for %d seconds..." % interval)
             time.sleep(interval)
 
 
@@ -234,7 +273,6 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description='Daemon to pull sensor information from SGE and push it to send_nsca.')
     parser.add_argument("-c", "--config", metavar="file", dest='config_file', default="./config.yaml", help="Supply YAML configuration file")
     parser.add_argument("-f", "--foreground", action='store_true', dest='run_in_foreground', default=False, help="Don't daemonize; run in foreground.")
-    parser.add_argument("-s", "--sync", action='store_true', dest="sync", default=False, help="Only synchronise host list.")
     parser.add_argument("--make-config", action='store_true', dest="make_config", default=False, help="Print default config file.")
     if not argv is None:
         return parser.parse_args()
@@ -249,7 +287,7 @@ def get_config_from_file(filename):
         logger.error("failed to read config file, exiting.")
         sys.exit(2)
 
-    must_have_keys = list()
+    must_have_keys = list(["icinga_server", "icinga_username", "icinga_password", "nsca_dest_host"])
     optional_keys = { "check_interval": 120,
                       "log_level": "INFO",
                       "log_file": "/var/log/sge_to_icinga.log" }
@@ -258,7 +296,7 @@ def get_config_from_file(filename):
         if not key in config.keys():
             logger.error("mandatory key not found in config file: %s" % key)
             sys.exit(2)
-    
+
     for key in optional_keys.keys():
         if not key in config.keys():
             config[key] = optional_keys[key]
@@ -272,9 +310,14 @@ def get_config_from_file(filename):
     return config
 
 def print_default_config_file():
-    sys.stdout.write("check_interval: 120\n" + 
-                     "log_level: INFO\n" + 
-                     "log_file: /var/log/sge_to_icinga.log\n")
+    sys.stdout.write("check_interval: 120\n" +
+                     "log_file: /var/log/sge_to_icinga.log\n" +
+                     "log_level: INFO\n" +
+                     "icinga_server: localhost\n" +
+                     "icinga_username: icinga\n" +
+                     "icinga_password: icinga\n" +
+                     "nsca_dest_host: localhost\n"
+                     )
     pass
 
 def configure_logger_returning_log_file_handle(args, config):
@@ -283,36 +326,31 @@ def configure_logger_returning_log_file_handle(args, config):
 
     frmt = logging.Formatter('%(module)s - %(asctime)s - %(levelname)s: %(message)s')
 
-    if args.run_in_foreground or args.make_config or args.sync:
-       fh = logging.StreamHandler()
+    if not (args.run_in_foreground or args.make_config):
+        fh = logging.FileHandler(config["log_file"])
     else:
-       fh = logging.FileHandler(config["log_file"])
+        fh = logging.StreamHandler()
 
-    fh.setFormatter(frmt)
     logger.addHandler(fh)
-
+    fh.setFormatter(frmt)
     return fh
 
 def main():
     args = parse_args()
+
+    # We set up a temporary logger here in case the config reading fails.
+    temp_handle = logging.StreamHandler()
+    logger.addHandler(temp_handle)
     config = get_config_from_file(args.config_file)
-    
+    logger.removeHandler(temp_handle)
+
     log_file_handle = configure_logger_returning_log_file_handle(args, config)
     # ^-- this needs to get explicitly preserved by the daemon setup
     #     all other file handles get closed
 
-    if args.make_config and args.sync:
-        logger.error("incompatible options specified, exiting.")
-        sys.exit(2)
-
     if args.make_config:
         print_default_config_file()
         sys.exit(0)
-
-    if args.sync:
-        # TODO: this
-        sys.exit(0)
-        pass
 
     # Only option left is run daemon
     d = MessageMakerDaemon(config, log_file_handle)
