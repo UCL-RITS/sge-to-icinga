@@ -9,3 +9,5 @@ Icinga2 setup steps:
  * Configure daemon with Icinga2 credentials
  * Run daemon on a node with SGE commands
 
+
+Note you can't use assign statements in templates

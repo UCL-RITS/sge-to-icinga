@@ -12,7 +12,7 @@ class MessageDevice:
                  logger,
                  #nsca_send_command = "/usr/local/nagios/bin/send_nsca",
                  #nsca_send_command = "/send_nsca",
-                 nsca_send_command = "/home/uccaiki/Code/opsview-gridengine-integration/shell_ver/send_nsca",
+                 nsca_send_command = "/home/uccaiki/Code/opsview-gridengine-integration/shell_ver/send_nsca.2.9.1-11.el7",
                  #nsca_config_file  = "/usr/local/nagios/etc/send_nsca.cfg"):
                  nsca_config_file  = "/home/uccaiki/Code/opsview-gridengine-integration/shell_ver/send_nsca.cfg"):
         self.logger = logger
@@ -37,7 +37,9 @@ class MessageDevice:
         try:
             messenger = subprocess.Popen(
                             [self.nsca_send_command, 
-                             self.destination_host, 
+                             self.destination_host,
+                             "-to",
+                             "300", # <- timeout, in seconds
                              "-c", 
                              "%s" % self.nsca_config_file], 
                             stdin=subprocess.PIPE,
@@ -50,7 +52,7 @@ class MessageDevice:
             self.logger.info("sent message.")
 
     def send_message_quads(self, message_quads):
-        total_message = ('\n'.join(['\t'.join([str(y) for y in x]) for x in message_quads]) + "\n")
+        total_message = (''.join(['\t'.join([str(y) for y in x]) for x in message_quads]) + "\n")
         with open("messages.view", "w") as f:
             f.write("%s\n" % total_message)
         self.send_one_message(total_message)
