@@ -48,11 +48,12 @@ class IcingaService:
         for host in host_service_dict.keys():
             if not self.has_host(host):
                 self.logger.warn("Icinga host entry \"%s\" was not found, attempting to create." % host)
-                result = self.add_host(host, { ("uses_%s" % x): "1" for x in host_service_dict[host] })
+                result = self.add_host(host, add_vars={ ("uses_%s" % x): "1" for x in host_service_dict[host] })
                 if result == False:
                     self.logger.error("failed to add host entry for \"%s\"." % host)
                 else:
-                    self.logger.warn("Icinga host entry \"%s\" created." % host) # <- this isn't really a warning but it closes off the warning above
+                    self.logger.warn("Icinga host entry \"%s\" created." % host) 
+                    # ^- this isn't really a warning but it closes off the warning above
             pass
 
 
