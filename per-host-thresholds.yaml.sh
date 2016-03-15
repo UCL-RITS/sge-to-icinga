@@ -18,7 +18,13 @@ export SGE_SINGLE_LINE=1
 # hostname
 # load_thresholds
 
-qconf -sq \*@\* \
+if [ -z "$1" ]; then
+    host="*"
+else
+    host="$1"
+fi
+
+qconf -sq "*@$host" \
     | grep -F "$grep_search_terms" \
     | sed -ne 'N
                s/^qname[ ]*\([A-Za-z]*\)\nhostname[ ]*\([A-Za-z0-9-]*\).*$/hostname=\2\nqname=\1@\2/mg
