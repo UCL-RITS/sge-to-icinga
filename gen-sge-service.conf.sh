@@ -11,6 +11,16 @@ fi
 
 :>$dest_file
 
+echo "
+template Service \"sge-reader\" {
+  max_check_attempts = 2
+  check_interval = 5m
+  retry_interval = 10m
+  check_command = \"passive\"
+}
+
+" >> $dest_file
+
 for check_name in `\
     ./per-host-thresholds.yaml.sh \
         | grep -o '^  [^:]*' \
@@ -19,8 +29,7 @@ for check_name in `\
         if [ "$check_name" != "qname" ]; then
             echo "
 apply Service \"$check_name\" {
-  import \"generic-service\"
-  check_command = \"passive\"
+  import \"sge-reader\"
 
   assign where host.vars.uses_$check_name == \"1\"
 } " >>$dest_file
