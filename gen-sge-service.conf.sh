@@ -18,7 +18,7 @@ for check_name in `\
     do
         if [ "$check_name" != "qname" ]; then
             echo "
-object Service \"$check_name\" {
+apply Service \"$check_name\" {
   import \"generic-service\"
   check_command = \"passive\"
 
