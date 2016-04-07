@@ -154,7 +154,7 @@ class IcingaServiceQuerier:
             add_vars_string = ', '.join([("\"%s\":\"%s\"" % (x, add_vars[x]))
                                           for x in add_vars.keys()])
             response = self.__put("objects/hosts/%s" % host, 
-                    data = "{ \"templates\": [ \"generic-host\", \"sge-node\" ], \"attrs\": { \"address\": \"%s\", \"vars\": { %s } } }" % (host_ip, add_vars_string))
+                    data = "{ \"templates\": [ \"generic-host\" ], \"attrs\": { \"address\": \"%s\", \"vars\": { \"sge_node\" : 1, %s } } }" % (host_ip, add_vars_string))
             if response.status_code == 200:
                 return True
             else:
