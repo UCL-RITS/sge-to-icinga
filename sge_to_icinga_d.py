@@ -179,10 +179,16 @@ def check_data_against_thresholds(thresholds, comparators):
                 else:
                     result = 0
 
+                # To make Nagios perfdata understand the type, see: https://nagios-plugins.org/doc/guidelines.html#AEN200
+                if comparators[k][1] == "MEMORY":
+                    append_to_value = "B"
+                else: 
+                    append_to_value = ""
+
                 if host_data.has_key("%s_nagtxt" % k) and host_data.has_key(k):
-                    data_string = "%s |%s" % (str(host_data[k]), host_data["%s_nagtxt" % k])
+                    data_string = "%s|%s=%s%s" % (host_data["%s_nagtxt" % k], k, str(host_data[k]), append_to_value)
                 elif host_data.has_key(k):
-                    data_string = str(host_data[k])
+                    data_string = "%s%s|%s=%s%s" % (host_data[k], append_to_value, k, str(host_data[k]), append_to_value)
                 elif host_data["errors"].has_key(k):
                     result = 2
                     data_string = host_data["errors"][k]
