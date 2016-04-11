@@ -330,7 +330,7 @@ def configure_logger_returning_log_file_handle(args, config):
 
     logger.setLevel(config["log_level"])
 
-    frmt = logging.Formatter('%(module)s - %(asctime)s - %(levelname)s: %(message)s')
+    frmt = logging.Formatter('%(name)s - %(asctime)s - %(levelname)s: %(message)s')
 
     if not (args.run_in_foreground or args.make_config):
         fh = logging.FileHandler(config["log_file"])
