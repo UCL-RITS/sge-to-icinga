@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import logging
 
 class MessageDevice:
     """ Our abstracted messaging device, NSCA implementation
@@ -43,8 +44,17 @@ class MessageDevice:
                              "-c", 
                              "%s" % self.nsca_config_file], 
                             stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE
                             )
-            messenger.communicate(input=message)
+            (stdout_text, stderr_text) = messenger.communicate(input=message)
+            if stderr_text != "":
+                for line in stderr_text.strip().split('\n'):
+                    self.logger.warn(line)
+            if stdout_text != "":
+                for line in stdout_text.strip().split('\n'):
+                    self.logger.info(line)
+
         except:
             self.logger.error("could not send message: %s" % sys.exc_info()[1]) 
             pass
