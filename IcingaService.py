@@ -48,7 +48,7 @@ class IcingaService:
         for host in host_service_dict.keys():
             if not self.has_host(host):
                 self.logger.warn("Icinga host entry \"%s\" was not found, attempting to create." % host)
-                result = self.add_host(host, add_vars={ ("uses_%s" % x): "1" for x in host_service_dict[host] })
+                result = self.add_host(host, add_vars={ ("%s" % x): "1" for x in host_service_dict[host] })
                 if result == False:
                     self.logger.error("failed to add host entry for \"%s\"." % host)
                 else:
@@ -154,7 +154,7 @@ class IcingaServiceQuerier:
             add_vars_string = ', '.join([("\"%s\":\"%s\"" % (x, add_vars[x]))
                                           for x in add_vars.keys()])
             response = self.__put("objects/hosts/%s" % host, 
-                    data = "{ \"templates\": [ \"generic-host\" ], \"attrs\": { \"address\": \"%s\", \"vars\": { \"sge_node\" : 1, %s } } }" % (host_ip, add_vars_string))
+                    data = "{ \"templates\": [ \"generic-host\" ], \"attrs\": { \"address\": \"%s\", \"vars\": { \"sge_node\" : 1, \"passive_checks\" : { %s } } } }" % (host_ip, add_vars_string))
             if response.status_code == 200:
                 return True
             else:
