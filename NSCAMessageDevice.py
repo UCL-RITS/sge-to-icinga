@@ -63,7 +63,10 @@ class MessageDevice:
 
     def send_message_quads(self, message_quads):
         total_message = (''.join(['\t'.join([str(y) for y in x]) for x in message_quads]) + "\n")
-        with open("messages.view", "w") as f:
-            f.write("%s\n" % total_message)
+        
+        if config.get("message_copy", False) != False: 
+            with open("messages.view", "w") as f:
+                f.write("%s\n" % total_message)
+        
         self.send_one_message(total_message)
         pass

@@ -306,7 +306,8 @@ def get_config_from_file(filename):
     must_have_keys = list(["icinga_server", "icinga_username", "icinga_password", "nsca_dest_host"])
     optional_keys = { "check_interval": 120,
                       "log_level": "INFO",
-                      "log_file": "/var/log/sge_to_icinga.log" }
+                      "log_file": "/var/log/sge_to_icinga.log",
+                      "message_copy": False }
 
     for key in must_have_keys:
         if not key in config.keys():
@@ -329,6 +330,7 @@ def print_default_config_file():
     sys.stdout.write("check_interval: 120\n" +
                      "log_file: /var/log/sge_to_icinga.log\n" +
                      "log_level: INFO\n" +
+                     "message_copy: /var/log/message_copy\n" +
                      "icinga_server: localhost\n" +
                      "icinga_username: icinga\n" +
                      "icinga_password: icinga\n" +
