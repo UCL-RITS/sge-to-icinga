@@ -4,10 +4,11 @@ This bundle takes resource information from SGE and puts it into Icinga2, creati
 
 #### Dependencies
 
-* Python 2.7 (I think)
-* bash, sed, gawk
+* Python 2.7
+* bash, sed, gawk, grep, sort
 * SGE (duh)
 * An Icinga2 server with NSCA configured to accept passive checks
+* A compatible version of `send_nsca` (it seems to have compatibility issues between versions)
 
 ##### Python Modules
 
