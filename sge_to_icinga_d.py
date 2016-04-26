@@ -152,7 +152,8 @@ def check_data_against_thresholds(thresholds, comparators):
 
     logger.info("getting sensor data from qstat.")
     time_start = time.time()
-    host_data_text = get_command_output("qstat-explain.yaml.sh")
+    #host_data_text = get_command_output("qstat-explain.yaml.sh")
+    host_data_text = get_command_output("qhost-F.yaml.sh")
     time_stop = time.time()
     logger.info("got sensor data from qstat in %d s." % (time_stop - time_start))
 
@@ -164,6 +165,15 @@ def check_data_against_thresholds(thresholds, comparators):
     messages = list()
     for host_data in host_doc_generator:
         hostname = host_data["hostname"]
+        if hostname == "global":
+            # Skip global because there's no threshold data for it
+            #  and getting it at all is just a by-product
+            continue
+        if not thresholds.has_key(hostname):
+            # Then there's nothing useful we can do here.
+            # Occurs when hosts are down or have no queues defined.
+            continue
+
         if host_data.has_key("errors"):
             host_data["errors"] = transform_errors_to_dict(host_data["errors"])
         else:
@@ -173,7 +183,7 @@ def check_data_against_thresholds(thresholds, comparators):
             if ((k[-7:] != "_nagtxt") and
                 comparators.has_key("%s_nagtxt" % k) and
                 not k in ["hostname","qname"]):
-
+                
                 if thresholds[hostname].has_key(k) and host_data.has_key(k):
                     result = compare_datum(host_data[k], thresholds[hostname][k], comparators[k])
                 else:
