@@ -6,7 +6,7 @@ This bundle takes resource information from SGE and puts it into Icinga2, creati
 
 * Python 2.7
 * bash, sed, gawk, grep, sort
-* SGE (duh)
+* SGE client binaries (`qhost`, `qstat`, `qconf`) + config
 * An Icinga2 server with NSCA configured to accept passive checks
 * A compatible version of `send_nsca` (it seems to have compatibility issues between versions)
 
