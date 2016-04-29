@@ -16,6 +16,7 @@ class MessageDevice:
                  nsca_send_command = "/home/uccaiki/Code/opsview-gridengine-integration/shell_ver/send_nsca.2.9.1-11.el7",
                  #nsca_config_file  = "/usr/local/nagios/etc/send_nsca.cfg"):
                  nsca_config_file  = "/home/uccaiki/Code/opsview-gridengine-integration/shell_ver/send_nsca.cfg"):
+        self.config = config
         self.logger = logger
         self.message_buffer = list()
         self.destination_host   = config["nsca_dest_host"]
@@ -64,7 +65,7 @@ class MessageDevice:
     def send_message_quads(self, message_quads):
         total_message = (''.join(['\t'.join([str(y) for y in x]) for x in message_quads]) + "\n")
         
-        if config.get("message_copy", False) != False: 
+        if self.config.get("message_copy", False) != False: 
             with open("messages.view", "w") as f:
                 f.write("%s\n" % total_message)
         
