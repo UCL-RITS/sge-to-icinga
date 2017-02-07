@@ -12,9 +12,9 @@ This bundle takes resource information from SGE and puts it into Icinga2, creati
 
 ##### Python Modules
 
-* daemon
+* daemon (python-daemon on PyPi, *not* daemon on PyPi)
 * Requests
-* yaml
+* yaml (PyYaml on PyPi)
 
 #### Useful Docs
 
