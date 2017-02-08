@@ -355,6 +355,10 @@ def configure_logger_returning_log_file_handle(args, config):
 
 def main():
     args = parse_args()
+    
+    if args.make_config:
+        print_default_config_file()
+        sys.exit(0)
 
     # We set up a temporary logger here in case the config reading fails.
     temp_handle = logging.StreamHandler()
@@ -365,10 +369,6 @@ def main():
     log_file_handle = configure_logger_returning_log_file_handle(args, config)
     # ^-- this needs to get explicitly preserved by the daemon setup
     #     all other file handles get closed
-
-    if args.make_config:
-        print_default_config_file()
-        sys.exit(0)
 
     # Only option left is run daemon
     d = MessageMakerDaemon(config, log_file_handle)
