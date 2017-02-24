@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import argparse
 import daemon
@@ -331,7 +331,7 @@ def print_default_config_file():
                      "log_file: /var/log/sge_to_icinga.log\n" +
                      "log_level: INFO\n" +
                      "message_copy: /var/log/message_copy\n" +
-                     "icinga_server: localhost\n" +
+                     "icinga_server: https://localhost:5665\n" +
                      "icinga_username: icinga\n" +
                      "icinga_password: icinga\n" +
                      "nsca_dest_host: localhost\n"
