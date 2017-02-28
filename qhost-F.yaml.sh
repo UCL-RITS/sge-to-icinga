@@ -3,9 +3,9 @@
 
 sensor_searches="$( qconf -sc \
                      | grep -o '^[^ ]*_nagtxt' \
-                     | cut -f 1 -d_ \
                      | sed -e 's/^/l:/' \
-                     | sed -e 'p;s/\$/_nagtxt/p' \
+                     | sed -ne 'p;s/_nagtxt$//p' \
+                     | sed -e 's/$/=/' \
                   )" 
 
 extra_searches="$(echo -e '\nerror\nnode-\nglobal   \n')"
